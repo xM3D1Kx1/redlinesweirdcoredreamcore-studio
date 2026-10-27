@@ -1,0 +1,17 @@
+# секреты
+.env
+.env.local
+*.key
+
+# служебное
+startup.log
+runtime-state.json
+*.bak
+repomix-output.xml
+node_modules/
+
+# IDE и система
+.idea/
+.vscode/
+Thumbs.db
+desktop.ini

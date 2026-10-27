@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>DREZZDON AI — студия красной разметки</title>
+  <meta name="theme-color" content="#08080b" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="app.js" defer></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="dz">DZ</span>
+    <b>DREZZDON <i>AI</i></b>
+    <span class="badge" id="engineBadge">CV / VLM</span>
+  </div>
+  <nav class="nav">
+    <select id="captionLang" class="pill select" title="Язык подписей">
+      <option value="drezzdon_en">EN / DREZZDON</option>
+      <option value="ru">RU / РУССКИЙ</option>
+    </select>
+    <button class="pill active" type="button">Студия</button>
+    <a class="pill link" href="./drezzdon_studio.html">Старый редактор</a>
+  </nav>
+</header>
+
+<div class="statusbar">
+  <div class="status-left">
+    <span class="dot" id="statusDot">0</span>
+    <span id="statusText">Загрузите фото — дальше всё сделает Gemini.</span>
+  </div>
+  <div class="status-right">
+    <span id="statSession">Сессия: 0 фото</span>
+    <span class="sep">·</span>
+    <span id="statVariant">Вариант: #1</span>
+    <span class="sep">·</span>
+    <span id="statRes">—</span>
+  </div>
+</div>
+
+<main class="layout">
+
+  <section class="card canvas-card">
+    <div class="card-head">
+      <span class="file-name"><i class="rec"></i><span id="fileName">фото не выбрано</span></span>
+      <div class="card-actions">
+        <button id="btnCompare" class="ghost" type="button">Показать оригинал</button>
+        <label class="ghost">
+          Загрузить фото
+          <input type="file" id="fileInput" accept="image/*" hidden />
+        </label>
+      </div>
+    </div>
+    <div class="stage" id="stage">
+      <canvas id="editorCanvas" width="900" height="900"></canvas>
+      <div class="empty-hint" id="emptyHint">
+        <b>Перетащите фото сюда</b>
+        <span>или нажмите «Загрузить фото». Рамки после разметки можно двигать.</span>
+      </div>
+    </div>
+  </section>
+
+  <aside class="side">
+
+    <section class="card pipeline">
+      <div class="card-head">
+        <span>3-этапный ИИ-конвейер</span>
+        <span class="conf" id="confBadge">уверенность —</span>
+      </div>
+      <ol class="steps">
+        <li data-step="1">
+          <span class="ico">1</span>
+          <div><b>1. Анализ сцены и CV-детекция</b><p>Ожидание фото</p></div>
+        </li>
+        <li data-step="2">
+          <span class="ico">2</span>
+          <div><b>2. Генерация подписей и планировщик</b><p>Ожидание анализа</p></div>
+        </li>
+        <li data-step="3">
+          <span class="ico">3</span>
+          <div><b>3. Векторный рендеринг DREZZDON</b><p>Ожидание разметки</p></div>
+        </li>
+      </ol>
+    </section>
+
+    <section class="card elements">
+      <div class="card-head">
+        <span>Размеченные ИИ элементы</span>
+        <span id="elCount">0 элементов</span>
+      </div>
+      <div class="list" id="elementList">
+        <p class="list-empty">Здесь появится список того, что модель нашла на фото.</p>
+      </div>
+    </section>
+
+  </aside>
+</main>
+
+<footer class="actions">
+  <button id="btnSave" class="primary" type="button">
+    <span class="ico-dl">⭳</span> Сохранить
+  </button>
+  <button id="btnRedo" class="secondary" type="button">
+    <span class="ico-re">⟳</span> Переделать оформление
+  </button>
+  <button id="btnNext" class="secondary accent" type="button">Следующее фото →</button>
+</footer>
+
+<div class="toasts" id="toasts"></div>
+
+</body>
+</html>
