@@ -287,7 +287,7 @@
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
     ctx.fillStyle = 'rgba(255,43,43,.10)';
-    ctx.font = '800 ' + Math.round(W * 0.18) + 'px Inter, Arial, sans-serif';
+    ctx.font = '400 ' + Math.round(W * 0.18) + 'px ' + FONT_HEAD;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('DZ', W / 2, H / 2);
@@ -395,13 +395,17 @@
     drawCaption(el);
   }
 
+  var FONT_HEAD = "'Anton','Arial Narrow',Arial,sans-serif";
+  var FONT_CAP = "'Oswald','Arial Narrow',Arial,sans-serif";
+  var FONT_SERIF = "Georgia,'Times New Roman',serif";
+
   function fitFont(text, maxWidth, startSize, minSize) {
     var fs = startSize;
     var floor = minSize || 10;
-    ctx.font = '700 ' + fs + 'px Inter, Arial, sans-serif';
+    ctx.font = '500 ' + fs + 'px ' + FONT_CAP;
     while (fs > floor && ctx.measureText(text).width > maxWidth) {
       fs -= 1;
-      ctx.font = '700 ' + fs + 'px Inter, Arial, sans-serif';
+      ctx.font = '500 ' + fs + 'px ' + FONT_CAP;
     }
     return fs;
   }
@@ -525,7 +529,7 @@
     }
     ctx.stroke();
 
-    ctx.font = '700 ' + fs + 'px Inter, Arial, sans-serif';
+    ctx.font = '600 ' + fs + 'px ' + FONT_CAP;
     ctx.textAlign = g.align;
     ctx.textBaseline = 'alphabetic';
     ctx.setLineDash([]);
@@ -555,12 +559,12 @@
     ctx.setLineDash([]);
     var w1 = 0, w2 = 0;
     if (el.l1) {
-      ctx.font = '800 ' + fs1 + 'px Inter, Arial, sans-serif';
-      ctx.fillText(el.l1, tx, ty);
-      w1 = ctx.measureText(el.l1).width;
+      ctx.font = '400 ' + fs1 + 'px ' + FONT_HEAD;
+      ctx.fillText(String(el.l1).toUpperCase(), tx, ty);
+      w1 = ctx.measureText(String(el.l1).toUpperCase()).width;
     }
     if (el.l2) {
-      ctx.font = 'italic 500 ' + fs2 + 'px Georgia, "Times New Roman", serif';
+      ctx.font = 'italic 500 ' + fs2 + 'px ' + FONT_SERIF;
       ctx.fillText(el.l2, tx, ty + fs2 + 6);
       w2 = ctx.measureText(el.l2).width;
       ctx.lineWidth = Math.max(1.5, W * 0.0022);
@@ -659,14 +663,26 @@
 
       // --- ремонт геометрии ---
       // Модель любит обводить «регион»: полосу горизонта, провода, полкадра.
-      // Тонкая длинная полоса — это линия, а не рамка: рисуем пунктир.
-      if (w > W * 0.55 && h < H * 0.12) {
+      // Тонкая длинная полоса — это линия, а не рамка: рисуем пунктир по её оси.
+      var midX = x + w / 2;
+      var midY = y + h / 2;
+      var nearEdge =
+        midX < W * 0.07 || midX > W * 0.93 || midY < H * 0.07 || midY > H * 0.93;
+
+      if (h > H * 0.55 && w < W * 0.12) {
+        // вертикальная полоса на всю высоту (девушка лежит, «линия» справа)
+        if (midX < W * 0.15 || midX > W * 0.85) return; // у края кадра — артефакт
         out.push({
           type: 'dashedPath',
-          pts: [
-            { x: x, y: y + h / 2 },
-            { x: x + w, y: y + h / 2 }
-          ]
+          pts: [{ x: midX, y: y }, { x: midX, y: y + h }]
+        });
+        return;
+      }
+      if (w > W * 0.55 && h < H * 0.12) {
+        if (midY < H * 0.15 || midY > H * 0.85) return;
+        out.push({
+          type: 'dashedPath',
+          pts: [{ x: x, y: midY }, { x: x + w, y: midY }]
         });
         return;
       }
@@ -722,12 +738,19 @@
     var persp = Array.isArray(analysis && analysis.perspective_lines) ? analysis.perspective_lines : [];
     persp.slice(0, 1).forEach(function (p) {
       if (!p || !Array.isArray(p.points) || p.points.length < 2) return;
-      out.push({
-        type: 'dashedPath',
-        pts: p.points.slice(0, 4).map(function (pt) {
-          return { x: clamp(Number(pt[0]) / 1000 * W, 0, W), y: clamp(Number(pt[1]) / 1000 * H, 0, H) };
-        })
+      var pts = p.points.slice(0, 4).map(function (pt) {
+        return { x: clamp(Number(pt[0]) / 1000 * W, 0, W), y: clamp(Number(pt[1]) / 1000 * H, 0, H) };
       });
+      var mx = 0, my = 0;
+      pts.forEach(function (q) { mx += q.x; my += q.y; });
+      mx /= pts.length;
+      my /= pts.length;
+      // линия, прижатая к краю кадра, или короткая — почти всегда артефакт
+      if (mx < W * 0.12 || mx > W * 0.88 || my < H * 0.12 || my > H * 0.88) return;
+      var dx = pts[pts.length - 1].x - pts[0].x;
+      var dy = pts[pts.length - 1].y - pts[0].y;
+      if (Math.hypot(dx, dy) < Math.max(W, H) * 0.12) return;
+      out.push({ type: 'dashedPath', pts: pts });
     });
 
     var hc = analysis && analysis.headline_caption;
@@ -752,8 +775,11 @@
   function placeHeadline(el, boxes) {
     var W = canvas.width, H = canvas.height;
     var fs = Math.round(baseFontPx() * 1.15);
-    ctx.font = '800 ' + fs + 'px Inter, Arial, sans-serif';
-    var tw = Math.max(ctx.measureText(el.l1 || '').width, ctx.measureText(el.l2 || '').width);
+    ctx.font = '400 ' + fs + 'px ' + FONT_HEAD;
+    var tw = Math.max(
+      ctx.measureText(String(el.l1 || '').toUpperCase()).width,
+      ctx.measureText(el.l2 || '').width
+    );
     var th = fs * 2.15;
     var m = 12;
 
@@ -1434,4 +1460,10 @@
   render();
   renderList();
   restoreLastPhoto();
+
+  // тестовая отладка: открыть страницу с ?test, чтобы дёргать buildElements извне
+  if (location.search.indexOf('test') >= 0) {
+    window.__build = buildElements;
+    window.__state = state;
+  }
 })();
