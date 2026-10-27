@@ -234,13 +234,15 @@ THE LOOK (follow literally):
 - Text lives in EMPTY space (sky, wall, asphalt), never over a face, never over the main subject.
 - Headline: two lines, big, in the empty upper zone; second line italic serif.
 
-WHAT TO PICK (3-5 detections, no more):
+WHAT TO PICK (2-3 detections, NEVER more than 3):
 1. the hero (silhouette, car, house, animal) — solid box + poetic caption;
 2. a receding line (road, wires, beam) — perspective_lines, 2-4 points along the edge;
 3. a near detail (pole, sign, traffic light, camera, post) — bracket_frame + technical tag;
 4. emptiness (sky, cloud, fog) — headline_caption + one small caption;
 5. far background (house, hill, lights) — box + a phrase like "somebody still waits here.";
 6. optical artefact (rainbow, flare, reflection, puddle) — tiny box + box_with_arrow + "refraction trace".
+
+COMPOSITION: airy and sparse. Two or three marks per frame, big and confident — like a sticker on a photo, not a diagram. Never annotate every object you see.
 
 GEOMETRY:
 - Coordinates are integers 0..1000, format [ymin, xmin, ymax, xmax].
@@ -250,9 +252,9 @@ GEOMETRY:
 - preferred_label_side: the side where empty space actually exists.
 - confidence: honest; do not annotate anything below 0.68.
 
-FORBIDDEN: inventing objects; labels over faces or over the hero; boxes bigger than 15% of the frame; more than 5 detections; captions longer than 28 characters; reusing the example captions word for word; any output that is not JSON.
+FORBIDDEN: inventing objects; labels over faces or over the hero; boxes bigger than 15% of the frame; more than 3 detections; captions longer than 28 characters; reusing the example captions word for word; numbering the marks; any output that is not JSON.
 
-CAPTION TONE (TONE SAMPLES ONLY — never reuse them; write 3-5 NEW captions for THIS photo, at most one may echo their style):
+CAPTION TONE (TONE SAMPLES ONLY — never reuse them; write 2-3 NEW captions for THIS photo, at most one may echo their style):
 "before the storm breaks…", "somebody still waits here.", "24kV // silent line", "i will find you."
 
 SCHEMA:

@@ -322,7 +322,7 @@
 
   function drawElement(el) {
     ctx.save();
-    applyRedStyle(Math.max(2, canvas.width * 0.0038), 10);
+    applyRedStyle(Math.max(2.5, canvas.width * 0.005), 12);
     if (el.type === 'aiBox') drawBox(el);
     else if (el.type === 'aiHeadline') drawHeadline(el);
     else if (el.type === 'aiLink') drawLink(el);
@@ -390,15 +390,6 @@
     } else {
       ctx.setLineDash([]);
       ctx.strokeRect(el.x, el.y, el.w, el.h);
-    }
-
-    if (el.index) {
-      var fs = Math.max(Math.round(minChromeFont() * 0.85), Math.round(baseFontPx() * 0.4));
-      ctx.setLineDash([]);
-      ctx.font = '700 ' + fs + 'px Inter, Arial, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText(pad2(el.index), el.x + 2, clamp(el.y - 4, fs + 2, canvas.height - 4));
     }
 
     drawCaption(el);
@@ -595,7 +586,7 @@
     ctx.lineTo(midX, midY);
     ctx.lineTo(el.bx, el.by);
     ctx.stroke();
-    drawArrowHead(midX, midY, el.bx, el.by, 10);
+    drawArrowHead(midX, midY, el.bx, el.by, 14);
   }
 
   function drawSelection(el) {
@@ -630,7 +621,7 @@
     var byId = {};
     var boxEls = [];
 
-    var dets = Array.isArray(analysis && analysis.detections) ? analysis.detections.slice(0, 6) : [];
+    var dets = Array.isArray(analysis && analysis.detections) ? analysis.detections.slice(0, 3) : [];
 
     dets.forEach(function (d, i) {
       var b = d && d.box_2d;
@@ -650,6 +641,21 @@
 
       var caption = String((d.caption || d.label || '')).replace(/\s+/g, ' ').trim();
       if (caption.length > 40) caption = caption.slice(0, 39) + '…';
+
+      // дубли по площади выбрасываем: две рамки на одном объекте — визуальный мусор
+      var dup = false;
+      for (var bi = 0; bi < boxEls.length; bi++) {
+        var b2 = boxEls[bi];
+        var ix = Math.max(0, Math.min(x + w, b2.x + b2.w) - Math.max(x, b2.x));
+        var iy = Math.max(0, Math.min(y + h, b2.y + b2.h) - Math.max(y, b2.y));
+        var inter = ix * iy;
+        var union = w * h + b2.w * b2.h - inter;
+        if (union > 0 && inter / union > 0.45) {
+          dup = true;
+          break;
+        }
+      }
+      if (dup) return;
 
       // --- ремонт геометрии ---
       // Модель любит обводить «регион»: полосу горизонта, провода, полкадра.
@@ -700,7 +706,7 @@
     });
 
     var conns = Array.isArray(analysis && analysis.connections) ? analysis.connections : [];
-    conns.slice(0, 3).forEach(function (c) {
+    conns.slice(0, 1).forEach(function (c) {
       var a = byId[c && c.from_id];
       var b = byId[c && c.to_id];
       if (!a || !b) return;
@@ -714,7 +720,7 @@
     });
 
     var persp = Array.isArray(analysis && analysis.perspective_lines) ? analysis.perspective_lines : [];
-    persp.slice(0, 3).forEach(function (p) {
+    persp.slice(0, 1).forEach(function (p) {
       if (!p || !Array.isArray(p.points) || p.points.length < 2) return;
       out.push({
         type: 'dashedPath',
@@ -753,26 +759,33 @@
 
     var cands = [{ x: el.x, y: el.y }];
     var cols = 6, rows = 6;
+    var mx = Math.max(14, W * 0.04);
+    var my = Math.max(14, H * 0.05);
     for (var c = 0; c < cols; c++) {
       for (var r = 0; r < rows; r++) {
-        var cx = m + (c / (cols - 1)) * Math.max(0, W - tw - m * 2);
-        var cy = fs + m + (r / (rows - 1)) * Math.max(0, H - th - fs - m * 2);
+        var cx = mx + (c / (cols - 1)) * Math.max(0, W - tw - mx * 2);
+        var cy = fs + my + (r / (rows - 1)) * Math.max(0, H - th - fs - my * 2);
         cands.push({ x: cx, y: cy });
       }
     }
 
     var best = null;
     var bestScore = Infinity;
+    var frameArea = W * H;
 
     cands.forEach(function (cand, idx) {
       var r = { x: cand.x, y: cand.y - fs * 1.15, w: tw + 8, h: th };
-      if (r.x < 2 || r.y < 2 || r.x + r.w > W - 2 || r.y + r.h > H - 2) return;
+      if (r.x < mx * 0.6 || r.y < my * 0.6 || r.x + r.w > W - mx * 0.6 || r.y + r.h > H - my * 0.6) return;
       var score = 0;
       boxes.forEach(function (b) {
         var ow = Math.max(0, Math.min(r.x + r.w, b.x + b.w) - Math.max(r.x, b.x));
         var oh = Math.max(0, Math.min(r.y + r.h, b.y + b.h) - Math.max(r.y, b.y));
         score += ow * oh;
       });
+      // композиция как на референсах: ближе к верху и к центру по горизонтали
+      var cxr = (r.x + r.w / 2) / W;
+      score += Math.abs(cxr - 0.5) * 0.07 * frameArea;
+      score += Math.abs(r.y / H - 0.10) * 0.05 * frameArea;
       // небольшая премия позиции, которую предложила модель
       if (idx === 0) score *= 0.9;
       if (score < bestScore) {
