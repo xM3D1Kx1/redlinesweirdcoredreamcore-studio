@@ -46,7 +46,9 @@
     session: 0,
     variant: 1,
     model: '',
-    analysis: null
+    analysis: null,
+    history: [],
+    hIndex: -1
   };
 
   // отношение «пикселей холста» к «пикселям на экране»: нужно, чтобы подписи
@@ -187,6 +189,9 @@
     state.elements = [];
     state.selected = null;
     state.compare = false;
+    state.history = [];
+    state.hIndex = -1;
+    pushHistory();
     btnCompare.textContent = 'Показать оригинал';
     btnCompare.classList.remove('on');
     $('fileName').textContent = state.fileName;
@@ -460,6 +465,11 @@
       g.align = 'left';
       g.fits = g.tx + tw < W - 4;
     }
+    // ручной сдвиг подписи относительно рамки
+    if (el.capDx) g.tx += el.capDx;
+    if (el.capDy) g.ty += el.capDy;
+    var rx = g.align === 'center' ? g.tx - tw / 2 : g.align === 'right' ? g.tx - tw : g.tx;
+    g.fits = rx > 4 && rx + tw < W - 4 && g.ty - fs > 2 && g.ty < H - 4;
     return g;
   }
 
@@ -501,6 +511,7 @@
       g.ty = clamp(g.ty, fs + 4, H - 6);
     }
     var capBox = captionRect(g, fs, tw);
+    el._capRect = capBox;
     var onGraphics = false;
     for (var b = 0; b < boxRects.length; b++) {
       if (rectsOverlap(capBox, boxRects[b])) { onGraphics = true; break; }
@@ -595,6 +606,15 @@
     ctx.setLineDash([7, 6]);
     if (el.type === 'aiBox') {
       ctx.strokeRect(el.x - 7, el.y - 7, el.w + 14, el.h + 14);
+      // ручки изменения размера
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#fff';
+      var hs = Math.max(6, canvas.width * 0.008);
+      [[el.x, el.y], [el.x + el.w, el.y], [el.x, el.y + el.h], [el.x + el.w, el.y + el.h]].forEach(
+        function (c) {
+          ctx.fillRect(c[0] - hs / 2, c[1] - hs / 2, hs, hs);
+        }
+      );
     } else if (el.type === 'aiHeadline') {
       var fs = Math.round(baseFontPx() * 1.15);
       ctx.strokeRect(el.x - 8, el.y - fs - 8, Math.min(canvas.width * 0.72, 320), fs * 2.2);
@@ -908,6 +928,7 @@
 
       state.elements = buildElements(a);
       state.selected = null;
+      pushHistory();
       var boxes = state.elements.filter(function (e) { return e.type === 'aiBox'; }).length;
       setStep(2, 'done', 'Сформировано ' + boxes + ' осмысленных акцентов (вариант #' + state.variant + ')');
 
@@ -1056,6 +1077,7 @@
     state.selected = null;
     state.analysis = null;
     state.model = 'локально';
+    pushHistory();
     fitCanvasToStage();
     render();
     renderList();
@@ -1112,40 +1134,124 @@
     return null;
   }
 
+  function captionHit(p) {
+    for (var i = state.elements.length - 1; i >= 0; i--) {
+      var r = state.elements[i]._capRect;
+      if (r && p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) return state.elements[i];
+    }
+    return null;
+  }
+
+  function handleHit(p) {
+    var el = state.selected;
+    if (!el || el.type !== 'aiBox') return null;
+    var d = Math.max(12, canvas.width * 0.014);
+    var corners = [
+      ['nw', el.x, el.y],
+      ['ne', el.x + el.w, el.y],
+      ['sw', el.x, el.y + el.h],
+      ['se', el.x + el.w, el.y + el.h]
+    ];
+    for (var i = 0; i < corners.length; i++) {
+      if (Math.hypot(p.x - corners[i][1], p.y - corners[i][2]) < d) return corners[i][0];
+    }
+    return null;
+  }
+
+  /* ------------------------------- история ------------------------------- */
+
+  function snapshot() { return JSON.parse(JSON.stringify(state.elements)); }
+
+  function pushHistory() {
+    state.history = state.history.slice(0, state.hIndex + 1);
+    state.history.push(snapshot());
+    if (state.history.length > 60) state.history.shift();
+    state.hIndex = state.history.length - 1;
+  }
+
+  function restoreHistory(i) {
+    if (i < 0 || i >= state.history.length) return;
+    state.hIndex = i;
+    state.elements = JSON.parse(JSON.stringify(state.history[i]));
+    state.selected = null;
+    render();
+    renderList();
+  }
+
   var drag = null;
 
   canvas.addEventListener('pointerdown', function (e) {
     if (!state.elements.length) return;
     var p = canvasPos(e);
-    var hit = hitTest(p);
-    if (hit) {
-      state.selected = hit;
-      drag = { el: hit, dx: p.x - hit.x, dy: p.y - hit.y };
-      if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
-      canvas.classList.add('dragging');
+    var corner = handleHit(p);
+    if (corner) {
+      drag = { mode: 'resize', corner: corner, el: state.selected, moved: false };
     } else {
-      state.selected = null;
+      var capEl = captionHit(p);
+      if (capEl) {
+        state.selected = capEl;
+        drag = { mode: 'caption', el: capEl, last: p, moved: false };
+      } else {
+        var hit = hitTest(p);
+        if (hit) {
+          state.selected = hit;
+          drag = { mode: 'move', el: hit, dx: p.x - hit.x, dy: p.y - hit.y, moved: false };
+        } else {
+          state.selected = null;
+        }
+      }
     }
+    if (drag && canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+    canvas.classList.toggle('dragging', Boolean(drag));
     render();
     renderList();
   });
 
   canvas.addEventListener('pointermove', function (e) {
+    var p = canvasPos(e);
     if (!drag) {
-      var p0 = canvasPos(e);
-      canvas.classList.toggle('hover', Boolean(state.elements.length && hitTest(p0)));
+      canvas.classList.toggle('hover', Boolean(handleHit(p) || captionHit(p) || hitTest(p)));
       return;
     }
-    var p = canvasPos(e);
     var el = drag.el;
-    var w = el.w || 0;
-    var h = el.h || 0;
-    el.x = clamp(p.x - drag.dx, -w * 0.5, canvas.width - w * 0.5 - 4);
-    el.y = clamp(p.y - drag.dy, -h * 0.5, canvas.height - h * 0.5 - 4);
+
+    if (drag.mode === 'move') {
+      var w = el.w || 0;
+      var h = el.h || 0;
+      el.x = clamp(p.x - drag.dx, -w * 0.5, canvas.width - w * 0.5 - 4);
+      el.y = clamp(p.y - drag.dy, -h * 0.5, canvas.height - h * 0.5 - 4);
+      drag.moved = true;
+    } else if (drag.mode === 'resize') {
+      var right = el.x + el.w;
+      var bottom = el.y + el.h;
+      var min = Math.max(20, canvas.width * 0.02);
+      var c = drag.corner;
+      if (c.indexOf('n') >= 0) {
+        var ny = Math.min(p.y, bottom - min);
+        el.y = Math.max(0, ny);
+        el.h = bottom - el.y;
+      }
+      if (c.indexOf('s') >= 0) el.h = Math.max(min, p.y - el.y);
+      if (c.indexOf('w') >= 0) {
+        var nx = Math.min(p.x, right - min);
+        el.x = Math.max(0, nx);
+        el.w = right - el.x;
+      }
+      if (c.indexOf('e') >= 0) el.w = Math.max(min, p.x - el.x);
+      el.w = Math.min(el.w, canvas.width - el.x);
+      el.h = Math.min(el.h, canvas.height - el.y);
+      drag.moved = true;
+    } else if (drag.mode === 'caption') {
+      el.capDx = (el.capDx || 0) + (p.x - drag.last.x);
+      el.capDy = (el.capDy || 0) + (p.y - drag.last.y);
+      drag.last = p;
+      drag.moved = true;
+    }
     render();
   });
 
   function endDrag() {
+    if (drag && drag.moved) pushHistory();
     drag = null;
     canvas.classList.remove('dragging');
   }
@@ -1154,7 +1260,7 @@
 
   canvas.addEventListener('dblclick', function (e) {
     var p = canvasPos(e);
-    var hit = hitTest(p);
+    var hit = captionHit(p) || hitTest(p);
     if (!hit) return;
     if (hit.type === 'aiBox') {
       var v = prompt('Подпись к рамке:', hit.caption || '');
@@ -1167,19 +1273,106 @@
         hit.l2 = (parts.slice(1).join(' ') || '').trim();
       }
     }
+    pushHistory();
     render();
     renderList();
   });
 
   document.addEventListener('keydown', function (e) {
-    if (!state.selected) return;
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      state.elements = state.elements.filter(function (el) { return el !== state.selected; });
-      state.selected = null;
+    var tag = (e.target && e.target.tagName ? e.target.tagName : '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    var mod = e.ctrlKey || e.metaKey;
+
+    if (mod && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      restoreHistory(e.shiftKey ? state.hIndex + 1 : state.hIndex - 1);
+      return;
+    }
+    if (mod && e.key.toLowerCase() === 'y') {
+      e.preventDefault();
+      restoreHistory(state.hIndex + 1);
+      return;
+    }
+    if (mod && e.key.toLowerCase() === 'd' && state.selected) {
+      e.preventDefault();
+      var copy = JSON.parse(JSON.stringify(state.selected));
+      copy.x += 16;
+      copy.y += 16;
+      copy.caption = (copy.caption || '') + ' 2';
+      state.elements.push(copy);
+      state.selected = copy;
+      pushHistory();
       render();
       renderList();
+      return;
+    }
+
+    if (!state.selected) return;
+
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      state.elements = state.elements.filter(function (el) { return el !== state.selected; });
+      state.selected = null;
+      pushHistory();
+      render();
+      renderList();
+      return;
+    }
+
+    var step = e.shiftKey ? 10 : 2;
+    var moved = false;
+    if (e.key === 'ArrowLeft') { state.selected.x -= step; moved = true; }
+    if (e.key === 'ArrowRight') { state.selected.x += step; moved = true; }
+    if (e.key === 'ArrowUp') { state.selected.y -= step; moved = true; }
+    if (e.key === 'ArrowDown') { state.selected.y += step; moved = true; }
+    if (moved) {
+      e.preventDefault();
+      render();
     }
   });
+
+  /* ---------------------------- добавить вручную ---------------------------- */
+
+  function addManual(kind) {
+    var W = canvas.width;
+    var H = canvas.height;
+    var el;
+    if (kind === 'box') {
+      el = {
+        type: 'aiBox',
+        x: W * 0.42,
+        y: H * 0.42,
+        w: W * 0.16,
+        h: H * 0.14,
+        caption: 'новая рамка',
+        label: 'вручную',
+        graphic: 'box_with_arrow',
+        side: 'bottom',
+        index: 0,
+        confidence: null
+      };
+    } else {
+      el = {
+        type: 'aiBox',
+        x: W * 0.46,
+        y: H * 0.46,
+        w: W * 0.06,
+        h: W * 0.06,
+        caption: 'твоя подпись',
+        label: 'вручную',
+        graphic: 'center_glyph',
+        side: 'top',
+        index: 0,
+        confidence: null
+      };
+    }
+    state.elements.push(el);
+    state.selected = el;
+    pushHistory();
+    render();
+    renderList();
+    toast('Добавлено: тащите мышкой, двойной клик — текст');
+  }
 
   /* -------------------------------- события -------------------------------- */
 
@@ -1193,6 +1386,8 @@
   btnCompare.addEventListener('click', toggleCompare);
   btnRedo.addEventListener('click', function () { analyze(true); });
   btnNext.addEventListener('click', function () { fileInput.click(); });
+  $('btnAddBox').addEventListener('click', function () { addManual('box'); });
+  $('btnAddText').addEventListener('click', function () { addManual('text'); });
 
   window.addEventListener('resize', function () {
     fitCanvasToStage();
